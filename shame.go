@@ -21,6 +21,7 @@ type MemShame struct {
 
 type appStat struct {
 	Name         string
+	Org          string
 	GUID         string
 	Space        string
 	Instances    int
@@ -30,7 +31,7 @@ type appStat struct {
 }
 
 func (s *appStat) toValueList() []string {
-	return []string{s.Name, s.Space, fmt.Sprintf("%d", s.MemoryAlloc), fmt.Sprintf("%d", s.AvgMemoryUse), fmt.Sprintf("%f", s.Ratio)}
+	return []string{s.Name, s.Org, s.Space, fmt.Sprintf("%d", s.MemoryAlloc), fmt.Sprintf("%d", s.AvgMemoryUse), fmt.Sprintf("%f", s.Ratio)}
 }
 
 type byRatio []appStat
@@ -129,12 +130,13 @@ func (memShame *MemShame) Run(cliConnection plugin.CliConnection, args []string)
 
 			stat := appStat{
 				Name:         cfApp.Name,
-				GUID:         cfApp.Guid,
+				Org:          cfApp.SpaceData.Entity.OrgData.Entity.Name,
+				GUID:         cfApp.Name,
 				Instances:    cfApp.Instances,
 				MemoryAlloc:  memAlloc,
-				Space:        cfApp.SpaceGuid,
+				Space:        cfApp.SpaceData.Entity.Name,
 				AvgMemoryUse: totalUsage / len(stats),
-				Ratio:        float64(memAlloc) / float64(totalUsage/len(stats)),
+				Ratio:        100 - (float64(totalUsage/len(stats)) / float64(memAlloc) * 100),
 			}
 
 			appStats = append(appStats, stat)
@@ -149,9 +151,9 @@ func (memShame *MemShame) Run(cliConnection plugin.CliConnection, args []string)
 
 	table := tablewriter.NewWriter(os.Stdout)
 	if *hr == true {
-		table.SetHeader([]string{"Name", "Space", "Alloc (MBs)", "AvgUse (MBs)", "Ratio"})
+		table.SetHeader([]string{"Name", "Org", "Space", "Alloc (MBs)", "AvgUse (MBs)", "Unutilized"})
 	} else {
-		table.SetHeader([]string{"Name", "Space", "Alloc", "AvgUse", "Ratio"})
+		table.SetHeader([]string{"Name", "Org", "Space", "Alloc", "AvgUse", "Ratio"})
 	}
 
 	for _, v := range appStats {

@@ -151,9 +151,9 @@ func (memShame *MemShame) Run(cliConnection plugin.CliConnection, args []string)
 
 	table := tablewriter.NewWriter(os.Stdout)
 	if *hr == true {
-		table.SetHeader([]string{"Name", "Org", "Space", "Alloc (MBs)", "AvgUse (MBs)", "Unutilized"})
+		table.SetHeader([]string{"Name", "Org", "Space", "Alloc (MBs)", "AvgUse (MBs)", "Un-utilized"})
 	} else {
-		table.SetHeader([]string{"Name", "Org", "Space", "Alloc", "AvgUse", "Ratio"})
+		table.SetHeader([]string{"Name", "Org", "Space", "Alloc", "AvgUse", "Un-utilized"})
 	}
 
 	for _, v := range appStats {

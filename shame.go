@@ -1,20 +1,22 @@
 package main
 
 import (
-	"code.cloudfoundry.org/cli/plugin"
 	"flag"
 	"fmt"
+	"os"
+	"sort"
+
+	"code.cloudfoundry.org/cli/plugin"
 	cfclient "github.com/cloudfoundry-community/go-cfclient"
 	"github.com/olekukonko/tablewriter"
 	"github.com/remeh/sizedwaitgroup"
 	pb "gopkg.in/cheggaaa/pb.v1"
-	"os"
-	"sort"
 )
 
 type MemShame struct {
 	org   string
 	space string
+	hr    bool
 }
 
 type appStat struct {
@@ -46,6 +48,7 @@ func (memShame *MemShame) Run(cliConnection plugin.CliConnection, args []string)
 	memShameFlagSet := flag.NewFlagSet("memshame", flag.ExitOnError)
 	org := memShameFlagSet.String("org", "", "set org to review")
 	space := memShameFlagSet.String("space", "", "set space to review (requires -org)")
+	hr := memShameFlagSet.Bool("hr", false, "set memory to human readable in MBs")
 
 	var appStats []appStat
 	err := memShameFlagSet.Parse(args[1:])
@@ -119,6 +122,11 @@ func (memShame *MemShame) Run(cliConnection plugin.CliConnection, args []string)
 				totalUsage += stat.Stats.Usage.Mem
 			}
 
+			if *hr == true {
+				memAlloc = (memAlloc / 1024 / 1024)
+				totalUsage = (totalUsage / 1024 / 1024)
+			}
+
 			stat := appStat{
 				Name:         cfApp.Name,
 				GUID:         cfApp.Guid,
@@ -140,7 +148,11 @@ func (memShame *MemShame) Run(cliConnection plugin.CliConnection, args []string)
 	sort.Sort(byRatio(appStats))
 
 	table := tablewriter.NewWriter(os.Stdout)
-	table.SetHeader([]string{"Name", "Space", "Alloc", "AvgUse", "Ratio"})
+	if *hr == true {
+		table.SetHeader([]string{"Name", "Space", "Alloc (MBs)", "AvgUse (MBs)", "Ratio"})
+	} else {
+		table.SetHeader([]string{"Name", "Space", "Alloc", "AvgUse", "Ratio"})
+	}
 
 	for _, v := range appStats {
 		table.Append(v.toValueList())
@@ -173,6 +185,7 @@ func (memShame *MemShame) GetMetadata() plugin.PluginMetadata {
 					Options: map[string]string{
 						"org":   "Specify the org to report",
 						"space": "Specify the space to report (requires -org)",
+						"hr":    "Output memory in human readable format",
 					},
 				},
 			},

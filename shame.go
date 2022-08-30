@@ -1,24 +1,27 @@
 package main
 
 import (
-	"code.cloudfoundry.org/cli/plugin"
 	"flag"
 	"fmt"
+	"os"
+	"sort"
+
+	"code.cloudfoundry.org/cli/plugin"
 	cfclient "github.com/cloudfoundry-community/go-cfclient"
 	"github.com/olekukonko/tablewriter"
 	"github.com/remeh/sizedwaitgroup"
 	pb "gopkg.in/cheggaaa/pb.v1"
-	"os"
-	"sort"
 )
 
 type MemShame struct {
 	org   string
 	space string
+	hr    bool
 }
 
 type appStat struct {
 	Name         string
+	Org          string
 	GUID         string
 	Space        string
 	Instances    int
@@ -28,7 +31,7 @@ type appStat struct {
 }
 
 func (s *appStat) toValueList() []string {
-	return []string{s.Name, s.Space, fmt.Sprintf("%d", s.MemoryAlloc), fmt.Sprintf("%d", s.AvgMemoryUse), fmt.Sprintf("%f", s.Ratio)}
+	return []string{s.Name, s.Org, s.Space, fmt.Sprintf("%d", s.MemoryAlloc), fmt.Sprintf("%d", s.AvgMemoryUse), fmt.Sprintf("%f", s.Ratio)}
 }
 
 type byRatio []appStat
@@ -46,6 +49,7 @@ func (memShame *MemShame) Run(cliConnection plugin.CliConnection, args []string)
 	memShameFlagSet := flag.NewFlagSet("memshame", flag.ExitOnError)
 	org := memShameFlagSet.String("org", "", "set org to review")
 	space := memShameFlagSet.String("space", "", "set space to review (requires -org)")
+	hr := memShameFlagSet.Bool("hr", false, "set memory to human readable in MBs")
 
 	var appStats []appStat
 	err := memShameFlagSet.Parse(args[1:])
@@ -119,14 +123,20 @@ func (memShame *MemShame) Run(cliConnection plugin.CliConnection, args []string)
 				totalUsage += stat.Stats.Usage.Mem
 			}
 
+			if *hr == true {
+				memAlloc = (memAlloc / 1024 / 1024)
+				totalUsage = (totalUsage / 1024 / 1024)
+			}
+
 			stat := appStat{
 				Name:         cfApp.Name,
-				GUID:         cfApp.Guid,
+				Org:          cfApp.SpaceData.Entity.OrgData.Entity.Name,
+				GUID:         cfApp.Name,
 				Instances:    cfApp.Instances,
 				MemoryAlloc:  memAlloc,
-				Space:        cfApp.SpaceGuid,
+				Space:        cfApp.SpaceData.Entity.Name,
 				AvgMemoryUse: totalUsage / len(stats),
-				Ratio:        float64(memAlloc) / float64(totalUsage/len(stats)),
+				Ratio:        100 - (float64(totalUsage/len(stats)) / float64(memAlloc) * 100),
 			}
 
 			appStats = append(appStats, stat)
@@ -140,7 +150,11 @@ func (memShame *MemShame) Run(cliConnection plugin.CliConnection, args []string)
 	sort.Sort(byRatio(appStats))
 
 	table := tablewriter.NewWriter(os.Stdout)
-	table.SetHeader([]string{"Name", "Space", "Alloc", "AvgUse", "Ratio"})
+	if *hr == true {
+		table.SetHeader([]string{"Name", "Org", "Space", "Alloc (MBs)", "AvgUse (MBs)", "Un-utilized"})
+	} else {
+		table.SetHeader([]string{"Name", "Org", "Space", "Alloc", "AvgUse", "Un-utilized"})
+	}
 
 	for _, v := range appStats {
 		table.Append(v.toValueList())
@@ -173,6 +187,7 @@ func (memShame *MemShame) GetMetadata() plugin.PluginMetadata {
 					Options: map[string]string{
 						"org":   "Specify the org to report",
 						"space": "Specify the space to report (requires -org)",
+						"hr":    "Output memory in human readable format",
 					},
 				},
 			},
